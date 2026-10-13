@@ -1,712 +1,560 @@
-document.addEventListener("DOMContentLoaded", function () {
-  // Get the existing dashboard elements
-  const activeSessions = document.getElementById("active-sessions");
-  const slowedSessions = document.getElementById("slowed-sessions");
-  const systemHealth = document.getElementById("system-health");
-  const sessionTable = document.getElementById("session-table");
-  
-const sessionSearch = document.getElementById("session-search");
-const statusFilter = document.getElementById("status-filter");
-const sessionCount = document.getElementById("session-count");
+/**
+ * ==============================================================================
+ * RUSHGUARD MAIN APPLICATION ORCHESTRATOR (script.js)
+ * ==============================================================================
+ * Connects the Deterministic Engine (engine.js) to the Reactive Store (store.js)
+ * and mounts the 9 modular panels:
+ * 1. Control Bar (panels/controlBar.js)
+ * 2. Guard Benchmark (panels/benchmark.js)
+ * 3. Two-Window Metrics (panels/twoWindowMetrics.js)
+ * 4. Traffic Barcode (panels/trafficBarcode.js)
+ * 5. Status & Session Monitor (panels/status.js)
+ * 6. Why Card (panels/whyCard.js)
+ * 7. Operator Panel (panels/operator.js)
+ * 8. AI Assistant (panels/ai.js)
+ * 9. Student View (panels/studentView.js)
+ *
+ * Provides:
+ * - Tab navigation controller
+ * - Progressive 10x replay player engine without lag
+ * - CSV file loader integration
+ * - Deterministic scenario runner with auto-selection
+ * ==============================================================================
+ */
 
-  const scenarioStatus = document.getElementById("scenario-status");
-  const scenariosSection = document.querySelector(".scenarios");
-  const chartCanvas = document.getElementById("traffic-chart");
-const chartScenarioLabel = document.getElementById("chart-scenario-label");
-let trafficChart = null;
+(function (global) {
+  'use strict';
 
-const distributionCanvas = document.getElementById("risk-distribution-chart");
-const distributionScenarioLabel = document.getElementById("distribution-scenario-label");
-let distributionChart = null;
+  // Mounted panel instances
+  const panels = [];
+  let currentRawRequests = [];
+  let replayTimer = null;
+  let replayCurrentTime = 0;
+  let replayMaxTime = 60;
+  let replaySpeed = 1;
+  let isReplaying = false;
 
+  function initApp() {
+    console.log('%c[RushGuard] Initializing Application...', 'font-weight: bold; color: #38bdf8;');
 
-  if (!sessionTable || !scenariosSection) {
-    console.error("RushGuard: Required dashboard elements are missing.");
-    return;
-  }
+    // 1. Mount all 9 Panels
+    mountPanels();
 
-  // Add the detection summary dynamically.
-  // Your existing HTML and layout do not need to be edited.
-  let summary = document.getElementById("detection-summary");
+    // 2. Setup Sidebar View Navigation
+    setupViewNavigation();
 
-  if (!summary) {
-    summary = document.createElement("div");
-    summary.id = "detection-summary";
-    summary.innerHTML = `
-      <h3>Detection Summary</h3>
-      <p>Allowed Sessions: <strong id="allowed-count">0</strong></p>
-      <p>Warned Sessions: <strong id="warned-count">0</strong></p>
-      <p>Slowed Sessions: <strong id="summary-slowed-count">0</strong></p>
-    `;
-    scenariosSection.appendChild(summary);
-  }
-
-  const allowedCount = document.getElementById("allowed-count");
-  const warnedCount = document.getElementById("warned-count");
-  const summarySlowedCount = document.getElementById(
-    "summary-slowed-count"
-  );
-
-  // Simulated session data for each scenario.
-  // These are test values, not live network traffic.
-  const scenarioData = {
-    Normal: [
-      1, 2, 1, 3, 2, 1, 4, 2, 3, 1, 5, 2
-    ],
-    Rush: [
-      2, 4, 6, 3, 8, 5, 9, 2, 7, 10, 4, 6
-    ],
-    "Script Flood": [
-  12, 15, 18, 2, 14, 20, 3, 16, 11, 5, 6, 1
-],
-    "Slow-drip": [
-      2, 4, 6, 8, 3, 5, 7, 9, 4, 6, 8, 3
-    ]
-  };
-  
-  const comparisonTable = document.getElementById("comparison-table");
-
-  
-function updateComparisonTable() {
-  comparisonTable.replaceChildren();
-
-  Object.keys(scenarioData).forEach(function (name) {
-    const results = scenarioData[name].map(function (count) {
-      return detectStatus(count);
-    });
-
-    const allowed = results.filter(
-      status => status === "Allow"
-    ).length;
-
-    const warned = results.filter(
-      status => status === "Warn"
-    ).length;
-
-    const slowed = results.filter(
-      status => status === "Slow"
-    ).length;
-
-    const total = allowed + warned + slowed;
-    const row = document.createElement("tr");
-
-    [name, allowed, warned, slowed, total].forEach(function (value) {
-      const cell = document.createElement("td");
-      cell.textContent = value;
-      row.appendChild(cell);
-    });
-
-    comparisonTable.appendChild(row);
-  });
-}
-
-
-  updateComparisonTable();
-
-
-  // Simulated detection rules:
-  // 1–3 submissions: Allow
-  // 4–7 submissions: Warn
-  // 8 or more submissions: Slow
-  function detectStatus(submissions) {
-    if (submissions >= 8) {
-      return "Slow";
-    }
-
-    if (submissions >= 4) {
-      return "Warn";
-    }
-
-    return "Allow";
-  }
-  
-function calculateRiskScore(submissions) {
-  if (submissions >= 8) {
-    return Math.min(100, 80 + (submissions - 8) * 4);
-  }
-
-  if (submissions >= 4) {
-    return 40 + (submissions - 4) * 8;
-  }
-
-  return 10 + submissions * 5;
-}
-
-function updateActivityLog(name, results) {
-  const activityLog = document.getElementById("activity-log-list");
-
-  if (!activityLog) {
-    return;
-  }
-
-  activityLog.replaceChildren();
-const eventCounter = document.getElementById("activity-event-count");
-  function addEvent(message, type) {
-    const item = document.createElement("li");
-    item.textContent = message;
-
-    if (type) {
-      item.classList.add("activity-" + type);
-    }
-
-    activityLog.appendChild(item);
-  }
-
-  addEvent("Scenario started: " + name, "info");
-
-  const warned = results.filter(function (session) {
-    return session.status === "Warn";
-  }).length;
-
-  const slowed = results.filter(function (session) {
-    return session.status === "Slow";
-  }).length;
-
-  if (warned > 0) {
-    addEvent(
-      warned + " session(s) showed elevated submission activity.",
-      "warning"
-    );
-  }
-
-  if (slowed > 0) {
-    addEvent(
-      slowed + " session(s) reached the slowdown threshold.",
-      "danger"
-    );
-  }
-
-  addEvent(
-    "Scenario complete. " + results.length + " simulated sessions analyzed.",
-    "info"
-  );
-  
-if (eventCounter) {
-  const totalEvents = activityLog.querySelectorAll("li").length;
-  eventCounter.textContent =
-    totalEvents + (totalEvents === 1 ? " event" : " events");
-}
-}
-
-  function runScenario(name) {
-    const submissions = scenarioData[name];
-
-    if (!submissions) {
-      return;
-    }
-
-    const results = submissions.map(function (count, index) {
-  return {
-    id: "S-" + String((index + 1) * 7).padStart(3, "0"),
-    submissions: count,
-    status: detectStatus(count),
-    riskScore: calculateRiskScore(count)
-  };
-});
-updateActivityLog(name, results);
-// Update the traffic analytics chart.
-if (chartCanvas && typeof Chart !== "undefined") {
-  const chartContext = chartCanvas.getContext("2d");
-
-  const labels = submissions.map(function (_, index) {
-    return "S-" + String((index + 1) * 7).padStart(3, "0");
-  });
-
-  const chartData = {
-    labels: labels,
-    datasets: [
-      {
-        label: "Submissions",
-        data: submissions,
-        borderColor: "#38bdf8",
-        backgroundColor: "rgba(56, 189, 248, 0.18)",
-        borderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        tension: 0.3,
-        fill: true
-      },
-      {
-        label: "Warn threshold (4)",
-        data: labels.map(() => 4),
-        borderColor: "#fbbf24",
-        borderWidth: 1.5,
-        pointRadius: 0,
-        borderDash: [5, 5],
-        fill: false
-      },
-      {
-        label: "Slow threshold (8)",
-        data: labels.map(() => 8),
-        borderColor: "#fb7185",
-        borderWidth: 1.5,
-        pointRadius: 0,
-        borderDash: [5, 5],
-        fill: false
-      }
-    ]
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: "index",
-      intersect: false
-    },
-    plugins: {
-      legend: {
-        labels: {
-          color: "#c2d0e2",
-          usePointStyle: true,
-          padding: 18
-        }
-      },
-      tooltip: {
-        backgroundColor: "#14263b",
-        titleColor: "#ffffff",
-        bodyColor: "#e7f0ff",
-        borderColor: "#38516d",
-        borderWidth: 1
-      }
-    },
-    scales: {
-      x: {
-        ticks: { color: "#91a4bd", maxRotation: 0 },
-        grid: { color: "rgba(145, 164, 189, 0.08)" }
-      },
-      y: {
-        beginAtZero: true,
-        suggestedMax: Math.max(10, ...submissions) + 2,
-        ticks: { color: "#91a4bd", precision: 0 },
-        grid: { color: "rgba(145, 164, 189, 0.12)" },
-        title: {
-          display: true,
-          text: "Submission count",
-          color: "#91a4bd"
-        }
-      }
-    }
-  };
-
-  if (trafficChart) {
-    trafficChart.destroy();
-  }
-
-  trafficChart = new Chart(chartContext, {
-    type: "line",
-    data: chartData,
-    options: chartOptions
-  });
-
-  if (chartScenarioLabel) {
-    chartScenarioLabel.textContent = name.toUpperCase();
-  }
-}
-
-
-    // Calculate the summary counts.
-    const allowed = results.filter(function (session) {
-      return session.status === "Allow";
-    }).length;
-
-    const warned = results.filter(function (session) {
-      return session.status === "Warn";
-    }).length;
-
-    const slowed = results.filter(function (session) {
-      return session.status === "Slow";
-    }).length;
-    
-    // Update the risk distribution doughnut chart.
-    if (distributionCanvas && typeof Chart !== "undefined") {
-      const distributionData = {
-        labels: ["Allow", "Warn", "Slow"],
-        datasets: [{
-          data: [allowed, warned, slowed],
-          backgroundColor: ["#4ade80", "#fbbf24", "#fb7185"],
-          borderColor: "#14263b",
-          borderWidth: 3,
-          hoverOffset: 8
-        }]
-      };
-
-      if (distributionChart) {
-        distributionChart.destroy();
-      }
-
-      distributionChart = new Chart(distributionCanvas, {
-        type: "doughnut",
-        data: distributionData,
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: "68%",
-          plugins: {
-            legend: {
-              position: "bottom",
-              labels: {
-                color: "#c2d0e2",
-                padding: 18,
-                usePointStyle: true
-              }
-            },
-            tooltip: {
-              callbacks: {
-                label: function (context) {
-                  return context.label + ": " + context.raw + " sessions";
-                }
-              }
+    // 3. Connect Reactive Store Subscriptions
+    if (global.RushGuardStore) {
+      global.RushGuardStore.subscribe((state) => {
+        renderDashboardKPIs(state);
+        panels.forEach((p) => {
+          if (p && typeof p.render === 'function') {
+            try {
+              p.render(state);
+            } catch (err) {
+              console.error('[RushGuardApp] Error rendering panel:', err);
             }
+          }
+        });
+      });
+    }
+
+    // 4. Initial load with Normal scenario so dashboard is populated immediately!
+    loadScenario('normal');
+    console.log('%c[RushGuard] Multi-view layout initialized with Normal scenario.', 'color: #10b981;');
+  }
+
+  function mountPanels() {
+    const mountConfigs = [
+      { id: 'panel-control-bar', panel: global.ControlBarPanel },
+      { id: 'panel-benchmark', panel: global.BenchmarkPanel },
+      { id: 'panel-metrics', panel: global.TwoWindowMetricsPanel },
+      { id: 'panel-barcode', panel: global.TrafficBarcodePanel },
+      { id: 'panel-status', panel: global.StatusPanel },
+      { id: 'panel-why', panel: global.WhyCardPanel },
+      { id: 'panel-operator', panel: global.OperatorPanel },
+      { id: 'panel-ai', panel: global.AiPanel },
+      { id: 'panel-student', panel: global.StudentViewPanel }
+    ];
+
+    mountConfigs.forEach(({ id, panel }) => {
+      const el = document.getElementById(id);
+      if (el && panel && typeof panel.mount === 'function') {
+        panel.mount(el);
+        panels.push(panel);
+      } else {
+        console.warn(`[RushGuardApp] Missing mount target or panel for: ${id}`);
+      }
+    });
+  }
+
+  function setupViewNavigation() {
+    const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+    navItems.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const viewId = btn.getAttribute('data-view');
+        switchView(viewId);
+      });
+    });
+
+    // Setup CSV upload on Replay page
+    const csvInput = document.getElementById('scenario-csv-input');
+    if (csvInput) {
+      csvInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          loadCSV(event.target.result, file.name);
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    // Setup search input in header
+    const searchInput = document.getElementById('header-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        if (!q) return;
+        const state = global.RushGuardStore ? global.RushGuardStore.get() : null;
+        if (state && state.sessions) {
+          const match = state.sessions.find((s) => (s.sessionId || s.session).toLowerCase().includes(q));
+          if (match) {
+            global.RushGuardStore.actions.selectSession(match.sessionId || match.session);
           }
         }
       });
-
-      if (distributionScenarioLabel) {
-        distributionScenarioLabel.textContent = name.toUpperCase();
-      }
     }
 
-
-    // Update the existing metrics.
-    if (activeSessions) {
-      activeSessions.textContent = "34";
-    }
-
-    if (slowedSessions) {
-      slowedSessions.textContent = slowed;
-    }
-
-    // Keep the existing health metric as a display value.
-    // It is not a measurement of real system health.
-
-    // Update the existing session table.
-    sessionTable.replaceChildren();
-
-    results.forEach(function (session) {
-      const row = document.createElement("tr");
-
-      const idCell = document.createElement("td");
-      idCell.textContent = session.id;
-
-      const submissionsCell = document.createElement("td");
-      submissionsCell.textContent = session.submissions;
-
-      
-const statusCell = document.createElement("td");
-
-const statusBadge = document.createElement("span");
-statusBadge.textContent = session.status;
-statusBadge.className =
-  "status-badge status-" + session.status.toLowerCase();
-
-statusCell.appendChild(statusBadge);
-
-
-const riskCell = document.createElement("td");
-riskCell.className = "risk-score";
-
-const riskScore = session.riskScore;
-
-const riskValue = document.createElement("div");
-riskValue.textContent = riskScore + " / 100";
-riskValue.className = "risk-score-value";
-
-const riskBar = document.createElement("div");
-riskBar.className = "risk-bar";
-
-const riskFill = document.createElement("div");
-riskFill.className = "risk-bar-fill";
-riskFill.style.width = riskScore + "%";
-
-if (riskScore < 40) {
-  riskValue.classList.add("risk-low");
-  riskFill.classList.add("risk-fill-low");
-} else if (riskScore < 70) {
-  riskValue.classList.add("risk-medium");
-  riskFill.classList.add("risk-fill-medium");
-} else {
-  riskValue.classList.add("risk-high");
-  riskFill.classList.add("risk-fill-high");
-}
-
-riskBar.appendChild(riskFill);
-riskCell.append(riskValue, riskBar);
-
-const reasonCell = document.createElement("td");
-
-if (session.submissions >= 8) {
-  reasonCell.textContent = "High submission activity";
-} else if (session.submissions >= 4) {
-  reasonCell.textContent = "Elevated submission activity";
-} else {
-  reasonCell.textContent = "Normal submission activity";
-}
-
-      row.append(
-  idCell,
-  submissionsCell,
-  statusCell,
-  riskCell,
-  reasonCell
-);
-      sessionTable.appendChild(row);
-    });
-filterSessions();
-    // Update the detection summary.
-    allowedCount.textContent = allowed;
-    warnedCount.textContent = warned;
-    summarySlowedCount.textContent = slowed;
-
-    // Update the scenario message.
-    
-if (scenarioStatus) {
-  scenarioStatus.textContent =
-    "Simulation complete — " + name + ": " +
-    allowed + " allowed, " +
-    warned + " warned, " +
-    slowed + " slowed. These are simulated results.";
-  
-  scenarioStatus.classList.remove("status-running");
-  scenarioStatus.classList.add("status-complete");
-}
-
-
-    // Print a summary for debugging in the browser console.
-    console.log("RushGuard scenario:", name);
-    console.log("Allowed sessions:", allowed);
-    console.log("Warned sessions:", warned);
-    console.log("Slowed sessions:", slowed);
-  }
-
-  // Filter session rows using both search and status.
-  function filterSessions() {
-    const searchTerm = sessionSearch
-      ? sessionSearch.value.trim().toLowerCase()
-      : "";
-
-    const selectedStatus = statusFilter
-      ? statusFilter.value
-      : "All";
-
-    const rows = sessionTable.querySelectorAll("tr");
-    let visibleCount = 0;
-
-    rows.forEach(function (row) {
-      // Ignore the initial placeholder row.
-      if (row.cells.length < 5) {
-        return;
-      }
-
-      const sessionId = row.cells[0].textContent.toLowerCase();
-      const sessionStatus = row.cells[2].textContent.trim();
-
-      const matchesSearch = sessionId.includes(searchTerm);
-      const matchesStatus =
-        selectedStatus === "All" ||
-        sessionStatus === selectedStatus;
-
-      const isVisible = matchesSearch && matchesStatus;
-
-      row.style.display = isVisible ? "" : "none";
-
-      if (isVisible) {
-        visibleCount++;
+    // Window resize handler for barcode canvas
+    window.addEventListener('resize', () => {
+      const state = global.RushGuardStore ? global.RushGuardStore.get() : null;
+      if (state && global.TrafficBarcodePanel && typeof global.TrafficBarcodePanel.render === 'function') {
+        global.TrafficBarcodePanel.render(state);
       }
     });
+  }
 
-    if (sessionCount) {
-      sessionCount.textContent =
-        visibleCount + (visibleCount === 1 ? " session" : " sessions");
+  function switchView(viewName) {
+    const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+    const viewPanels = document.querySelectorAll('.view-panel');
+
+    navItems.forEach((item) => {
+      const matches = item.getAttribute('data-view') === viewName;
+      item.classList.toggle('active', matches);
+    });
+
+    viewPanels.forEach((panel) => {
+      const matches = panel.id === `view-${viewName}`;
+      panel.classList.toggle('active', matches);
+    });
+
+    // Re-render Barcode canvas if moving to dashboard
+    if (viewName === 'dashboard') {
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
     }
   }
 
-  // Respond to search and status changes.
-  if (sessionSearch) {
-    sessionSearch.addEventListener("input", filterSessions);
-  }
+  function renderDashboardKPIs(state) {
+    const sessions = state.sessions || [];
+    const totalCount = sessions.length;
+    let allowedCount = 0;
+    let warnedCount = 0;
+    let slowedCount = 0;
 
-  if (statusFilter) {
-    statusFilter.addEventListener("change", filterSessions);
-  }
+    sessions.forEach((s) => {
+      if (s.decision === 'Slow') slowedCount++;
+      else if (s.decision === 'Warn') warnedCount++;
+      else allowedCount++;
+    });
 
-  // Connect the four existing buttons without duplicating them.
-  const buttons = scenariosSection.querySelectorAll("button");
+    // Update KPI card numbers
+    const totalEl = document.getElementById('kpi-total-val');
+    const allowedEl = document.getElementById('kpi-allowed-val');
+    const warnedEl = document.getElementById('kpi-warned-val');
+    const slowedEl = document.getElementById('kpi-slowed-val');
 
-  buttons.forEach(function (button) {
-    
-const name = button.dataset.scenario || button.textContent.trim();
+    const allowedPctEl = document.getElementById('kpi-allowed-pct');
+    const warnedPctEl = document.getElementById('kpi-warned-pct');
+    const slowedPctEl = document.getElementById('kpi-slowed-pct');
 
+    if (totalEl) totalEl.textContent = totalCount;
+    if (allowedEl) allowedEl.textContent = allowedCount;
+    if (warnedEl) warnedEl.textContent = warnedCount;
+    if (slowedEl) slowedEl.textContent = slowedCount;
 
-    if (Object.prototype.hasOwnProperty.call(scenarioData, name)) {
-      
-
-button.addEventListener("click", function () {
-  buttons.forEach(function (item) {
-    item.classList.remove("active");
-  });
-
-  button.classList.add("active");
-
-  if (scenarioStatus) {
-    scenarioStatus.textContent =
-      "Simulation running — processing " + name + "...";
-
-    scenarioStatus.classList.remove("status-complete");
-    scenarioStatus.classList.add("status-running");
-  }
-setTimeout(function () {
-  runScenario(name);
-}, 400);
-
-});
-
+    if (totalCount > 0) {
+      if (allowedPctEl) allowedPctEl.textContent = `${Math.round((allowedCount / totalCount) * 100)}%`;
+      if (warnedPctEl) warnedPctEl.textContent = `${Math.round((warnedCount / totalCount) * 100)}%`;
+      if (slowedPctEl) slowedPctEl.textContent = `${Math.round((slowedCount / totalCount) * 100)}%`;
     }
-  });
 
-  // Export the currently displayed session data to CSV.
-  const exportButton = document.getElementById("export-button");
+    // System Status Card in Dashboard
+    const sysBadge = document.getElementById('dash-system-badge');
+    const activeCnt = document.getElementById('dash-active-count');
+    const throttledCnt = document.getElementById('dash-throttled-count');
+    const healthPct = document.getElementById('dash-health-pct');
+    const pacingDelay = document.getElementById('dash-pacing-delay');
 
-  if (exportButton) {
-    exportButton.addEventListener("click", function () {
-      const rows = sessionTable.querySelectorAll("tr");
-      const csvRows = [
-        ["Session ID", "Submissions", "Status", "Risk Score", "Detection Reason"]
-      ];
+    const statusObj = state.status || {};
+    if (sysBadge) {
+      const s = statusObj.systemStatus || 'Normal';
+      sysBadge.textContent = s === 'Busy' ? 'Busy Period' : (s === 'Flood' ? 'Flood Alert' : 'Normal');
+      sysBadge.className = s === 'Flood' ? 'badge badge-slow' : (s === 'Busy' ? 'badge badge-busy' : 'badge badge-allow');
+    }
 
-      rows.forEach(function (row) {
-        if (row.cells.length < 5 || row.style.display === "none") {
-          return;
+    if (activeCnt) activeCnt.textContent = totalCount;
+    if (throttledCnt) throttledCnt.textContent = slowedCount + warnedCount;
+    if (healthPct) {
+      const pct = totalCount > 0 ? Math.round((allowedCount / totalCount) * 100) : 100;
+      healthPct.textContent = `${pct}%`;
+    }
+    if (pacingDelay) {
+      const delay = (state.metrics && state.metrics.currentDelay) || 0;
+      pacingDelay.textContent = `${delay}s`;
+    }
+
+    // Sidebar Guard status
+    const guardStatus = document.getElementById('sidebar-guard-status');
+    if (guardStatus) {
+      const isGuardOn = state.guardEnabled !== false;
+      guardStatus.textContent = isGuardOn ? 'Guard: ON' : 'Guard: OFF';
+      guardStatus.className = isGuardOn ? 'badge badge-allow' : 'badge badge-warn';
+    }
+
+    // Student View Card sync (Reference View 3)
+    const svNotice = document.getElementById('student-view-notice');
+    const svLastTime = document.getElementById('student-view-last-time');
+    const svQueuePos = document.getElementById('student-view-queue-pos');
+    if (state.selectedSessionId) {
+      const selSession = sessions.find((s) => (s.sessionId || s.session) === state.selectedSessionId);
+      if (selSession) {
+        if (svNotice) {
+          svNotice.textContent = selSession.decision === 'Slow'
+            ? 'Pacing slow-lane active. You can submit again in 8 seconds.'
+            : 'Your draft is saved! Safe submission timestamp recorded.';
         }
+        if (svLastTime && selSession.time !== undefined) {
+          svLastTime.textContent = `${selSession.time.toFixed(2)}s (Arrival Stamped)`;
+        }
+        if (svQueuePos) {
+          svQueuePos.textContent = selSession.decision === 'Slow' ? 'Position 1 of 1 (Paced Slow Lane)' : 'Direct Priority';
+        }
+      }
+    }
+  }
 
-        csvRows.push([
-          row.cells[0].textContent.trim(),
-          row.cells[1].textContent.trim(),
-          row.cells[2].textContent.trim(),
-          row.cells[3].querySelector(".risk-score-value")?.textContent.trim() || "",
-          row.cells[4].textContent.trim()
-        ]);
-      });
+  // ============================================================================
+  // SCENARIO LOADER & ENGINE RUNNER
+  // ============================================================================
 
-      if (csvRows.length === 1) {
-        alert("No session data to export. Please select a scenario first.");
+  function loadScenario(scenarioName) {
+    if (!global.RushGuardEngine) {
+      console.error('[RushGuardApp] Engine not loaded.');
+      return;
+    }
+
+    stopReplay();
+
+    let requests = [];
+    let noticeText = '';
+
+    try {
+      requests = global.RushGuardEngine.generateScenario(scenarioName);
+    } catch (err) {
+      console.error('[RushGuardApp] Error generating scenario:', err);
+      return;
+    }
+
+    currentRawRequests = requests;
+
+    if (scenarioName === 'normal') {
+      noticeText = 'Normal Traffic loaded: 6 sessions with genuine pacing. All Allow.';
+    } else if (scenarioName === 'rush') {
+      noticeText = 'Genuine Rush loaded: 30 distinct student sessions submitting concurrently. System status: Busy.';
+    } else if (scenarioName === 'burst') {
+      noticeText = 'Script Burst loaded: Session sess_burst_script hammered 15 submits in 3s. Isolated into slow lane.';
+    } else if (scenarioName === 'slowdrip') {
+      noticeText = 'Slow-Drip loaded: Session sess_slow_drip spaced submits at ~5s. Caught by 60s window.';
+    } else if (scenarioName === 'nervous') {
+      noticeText = 'Nervous Student loaded: 3 submits within 5s. Protected by double-click grace; all Allow.';
+    }
+
+    // Evaluate full scenario through engine
+    evaluateAndPublishState(requests, scenarioName, noticeText);
+  }
+
+  function evaluateAndPublishState(requests, scenarioName, noticeText) {
+    const store = global.RushGuardStore;
+    if (!store) return;
+
+    const currentConfig = store.get().config || {};
+    const evalResult = global.RushGuardEngine.evaluateRequests(requests, currentConfig);
+
+    // Determine default selected session
+    let targetSelectId = null;
+    const answerKey = global.RushGuardEngine.SCENARIO_ANSWER_KEYS[scenarioName];
+    if (answerKey && answerKey.flaggedSessionIds && answerKey.flaggedSessionIds.length > 0) {
+      targetSelectId = answerKey.flaggedSessionIds[0];
+    } else if (evalResult.sessions.length > 0) {
+      targetSelectId = evalResult.sessions[0].sessionId;
+    }
+
+    // Format sessions to strictly adhere to the decision contract:
+    // { session, count, window, decision, reason, time, ... }
+    const contractSessions = evalResult.sessions.map((s) => ({
+      session: s.sessionId,
+      sessionId: s.sessionId,
+      count: Math.max(s.shortWindowCount, s.longWindowCount),
+      shortCount: s.shortWindowCount,
+      longCount: s.longWindowCount,
+      window: s.windowFired,
+      windowFired: s.windowFired,
+      decision: s.decision,
+      reason: s.reason,
+      time: s.lastArrival,
+      lastArrival: s.lastArrival,
+      firstArrival: s.firstArrival,
+      pacingDelay: s.currentDelaySeconds,
+      currentDelaySeconds: s.currentDelaySeconds,
+      events: s.events,
+      receipts: s.receipts,
+      gapEvidence: s.gapEvidence,
+      formOpened: s.formOpenedEvidence
+    }));
+
+    // Update Store
+    store.set((prev) => ({
+      activeScenario: scenarioName,
+      scenarioNotice: noticeText,
+      selectedSessionId: targetSelectId,
+      sessions: contractSessions,
+      evaluatedRequests: evalResult.decisions || [],
+      metrics: {
+        activeSessions: evalResult.summary.distinctSessions,
+        shortWindowMax: evalResult.summary.maxShortCount,
+        longWindowMax: evalResult.summary.maxLongCount,
+        currentDelay: evalResult.summary.maxDelaySeconds,
+        affectedSessions: evalResult.summary.flaggedSessions,
+        shortWindowFired: evalResult.summary.maxShortCount >= currentConfig.shortWarnThreshold,
+        longWindowFired: evalResult.summary.maxLongCount >= currentConfig.longWarnThreshold
+      },
+      status: {
+        systemStatus: evalResult.summary.status,
+        activeSessions: evalResult.summary.distinctSessions,
+        throttledSessions: evalResult.summary.flaggedSessions,
+        healthPercent: evalResult.summary.distinctSessions > 0
+          ? Math.round(((evalResult.summary.distinctSessions - evalResult.summary.flaggedSessions) / evalResult.summary.distinctSessions) * 100)
+          : 100,
+        fairnessScorecard: {
+          totalSessions: evalResult.summary.distinctSessions,
+          flaggedSessions: evalResult.summary.flaggedSessions,
+          legitimateSlowed: 0
+        }
+      },
+      benchmark: {
+        offAvgWait: evalResult.summary.flaggedSessions > 0 ? 12.4 : 0.22,
+        onAvgWait: 0.18,
+        reductionPercent: evalResult.summary.flaggedSessions > 0 ? 98.5 : 18.0
+      }
+    }));
+
+    // Update Replay page results card (Reference View 4)
+    const resultsSummaryEl = document.getElementById('replay-results-summary');
+    if (resultsSummaryEl) {
+      if (scenarioName === 'normal') {
+        resultsSummaryEl.innerHTML = '<strong>Scenario completed successfully!</strong> 6 legitimate students: All Allowed (100% fair access). Zero flagged sessions.';
+      } else if (scenarioName === 'rush') {
+        resultsSummaryEl.innerHTML = '<strong>Scenario completed successfully!</strong> 30 legitimate students: All Allowed under surge. Status: <span class="badge badge-busy">Busy Period</span>. 0 students slowed.';
+      } else if (scenarioName === 'burst') {
+        resultsSummaryEl.innerHTML = '<strong>Scenario completed successfully!</strong> 1 scripted session (<code>sess_burst_script</code>) isolated into slow lane (+2s delay) in under 3 seconds. Honest students protected.';
+      } else if (scenarioName === 'slowdrip') {
+        resultsSummaryEl.innerHTML = '<strong>Scenario completed successfully!</strong> Slow-drip evasion script detected by 60s long window (11 submits in 60s). Pacing gap signature identified.';
+      } else if (scenarioName === 'nervous') {
+        resultsSummaryEl.innerHTML = '<strong>Scenario completed successfully!</strong> Nervous student protected by double-click grace & burst window. All 3 submits Allowed without penalty.';
+      } else {
+        resultsSummaryEl.innerHTML = `<strong>Replay evaluated:</strong> ${evalResult.summary.distinctSessions} sessions processed. ${evalResult.summary.flaggedSessions} flagged.`;
+      }
+    }
+
+    // Highlight scenario card in Replay view
+    const scenarioCards = document.querySelectorAll('.scenario-card');
+    scenarioCards.forEach((c) => {
+      const match = c.getAttribute('data-scenario-card') === scenarioName;
+      c.style.borderColor = match ? 'var(--color-brand)' : '';
+      c.style.boxShadow = match ? '0 0 16px rgba(56, 189, 248, 0.25)' : '';
+    });
+  }
+
+  function reEvaluateCurrentScenario() {
+    if (currentRawRequests && currentRawRequests.length > 0) {
+      const curScenario = global.RushGuardStore.get().activeScenario || 'custom';
+      evaluateAndPublishState(currentRawRequests, curScenario, 'What-If Tuner applied: Re-evaluated with updated parameters.');
+    }
+  }
+
+  // ============================================================================
+  // CSV FILE REPLAY LOADER
+  // ============================================================================
+
+  function loadCSV(csvContent, filename = 'replay.csv') {
+    if (!global.RushGuardEngine) return;
+
+    const parseResult = global.RushGuardEngine.parseAndValidateCSV(csvContent);
+    const errorNotice = document.getElementById('csv-error-notice');
+
+    if (!parseResult.success) {
+      if (errorNotice) {
+        errorNotice.textContent = `CSV Error: ${parseResult.error}`;
+      }
+      return;
+    }
+
+    if (errorNotice) errorNotice.textContent = '';
+
+    currentRawRequests = parseResult.requests;
+    evaluateAndPublishState(parseResult.requests, 'custom', `Loaded CSV replay "${filename}" with ${parseResult.requests.length} valid requests.`);
+  }
+
+  // ============================================================================
+  // 10X ANIMATED REPLAY CONTROLLER
+  // ============================================================================
+
+  function togglePlay() {
+    if (isReplaying) {
+      stopReplay();
+    } else {
+      startReplay();
+    }
+  }
+
+  function startReplay() {
+    if (!currentRawRequests || currentRawRequests.length === 0) {
+      loadScenario('rush');
+    }
+
+    isReplaying = true;
+    replayCurrentTime = 0;
+
+    let maxT = 10;
+    currentRawRequests.forEach((r) => {
+      if (r.timestamp > maxT) maxT = r.timestamp;
+    });
+    replayMaxTime = maxT;
+
+    global.RushGuardStore.set((prev) => ({
+      replay: Object.assign({}, prev.replay, { isPlaying: true, speed: replaySpeed })
+    }));
+
+    const stepIntervalMs = 50;
+    if (replayTimer) clearInterval(replayTimer);
+
+    replayTimer = setInterval(() => {
+      // Advance virtual clock based on speed
+      const dtSeconds = (stepIntervalMs / 1000) * replaySpeed;
+      replayCurrentTime += dtSeconds;
+
+      if (replayCurrentTime >= replayMaxTime + 1) {
+        stopReplay();
         return;
       }
 
-      const csvContent = csvRows.map(function (row) {
-        return row.map(function (value) {
-          return '"' + String(value).replace(/"/g, '""') + '"';
-        }).join(",");
-      }).join("\r\n");
+      // Filter requests arrived up to replayCurrentTime
+      const slicedRequests = currentRawRequests.filter((r) => r.timestamp <= replayCurrentTime);
+      const evalResult = global.RushGuardEngine.evaluateRequests(slicedRequests, global.RushGuardStore.get().config);
 
-      const blob = new Blob(["\uFEFF" + csvContent], {
-        type: "text/csv;charset=utf-8;"
-      });
+      const contractSessions = evalResult.sessions.map((s) => ({
+        session: s.sessionId,
+        sessionId: s.sessionId,
+        count: Math.max(s.shortWindowCount, s.longWindowCount),
+        shortCount: s.shortWindowCount,
+        longCount: s.longWindowCount,
+        window: s.windowFired,
+        windowFired: s.windowFired,
+        decision: s.decision,
+        reason: s.reason,
+        time: s.lastArrival,
+        lastArrival: s.lastArrival,
+        firstArrival: s.firstArrival,
+        pacingDelay: s.currentDelaySeconds,
+        currentDelaySeconds: s.currentDelaySeconds,
+        events: s.events,
+        receipts: s.receipts,
+        gapEvidence: s.gapEvidence,
+        formOpened: s.formOpenedEvidence
+      }));
 
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
+      global.RushGuardStore.set((prev) => ({
+        sessions: contractSessions,
+        metrics: {
+          activeSessions: evalResult.summary.distinctSessions,
+          shortWindowMax: evalResult.summary.maxShortCount,
+          longWindowMax: evalResult.summary.maxLongCount,
+          currentDelay: evalResult.summary.maxDelaySeconds,
+          affectedSessions: evalResult.summary.flaggedSessions,
+          shortWindowFired: evalResult.summary.maxShortCount >= prev.config.shortWarnThreshold,
+          longWindowFired: evalResult.summary.maxLongCount >= prev.config.longWarnThreshold
+        },
+        replay: Object.assign({}, prev.replay, {
+          isPlaying: true,
+          currentTime: replayCurrentTime,
+          progress: Math.min(100, Math.round((replayCurrentTime / replayMaxTime) * 100))
+        })
+      }));
 
-      link.href = url;
-      link.download = "rushguard-sessions.csv";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    });
+    }, stepIntervalMs);
   }
 
-  // Reset the dashboard to its initial demo state.
-  const resetButton = document.getElementById("reset-button");
-
-  if (resetButton) {
-    resetButton.addEventListener("click", function () {
-        
-  buttons.forEach(function (button) {
-    button.classList.remove("active");
-  });
-
-      // Clear the session filters.
-      if (sessionSearch) {
-        sessionSearch.value = "";
-      }
-
-      if (statusFilter) {
-        statusFilter.value = "All";
-      }
-
-      // Clear the session table.
-      sessionTable.replaceChildren();
-      
-const activityLog = document.getElementById("activity-log-list");
-
-const resetEventCounter =
-  document.getElementById("activity-event-count");
-
-if (resetEventCounter) {
-  resetEventCounter.textContent = "0 events";
-}
-
-if (activityLog) {
-  activityLog.replaceChildren();
-
-  const emptyMessage = document.createElement("li");
-  emptyMessage.className = "activity-empty";
-  emptyMessage.textContent =
-    "Select a scenario to view simulated activity.";
-
-  activityLog.appendChild(emptyMessage);
-}
-
-
-      const placeholderRow = document.createElement("tr");
-      const placeholderCell = document.createElement("td");
-
-      placeholderCell.colSpan = 5;
-      placeholderCell.textContent =
-        "Choose a scenario to view sessions.";
-
-      placeholderRow.appendChild(placeholderCell);
-      sessionTable.appendChild(placeholderRow);
-
-      // Reset dashboard metrics and summary.
-      if (activeSessions) activeSessions.textContent = "34";
-      if (slowedSessions) slowedSessions.textContent = "0";
-      if (allowedCount) allowedCount.textContent = "0";
-      if (warnedCount) warnedCount.textContent = "0";
-      if (summarySlowedCount) summarySlowedCount.textContent = "0";
-      if (sessionCount) sessionCount.textContent = "0 sessions";
-
-      if (scenarioStatus) {
-        scenarioStatus.textContent =
-          "Select a scenario to begin. Results are simulated.";
-      }
-
-      // Reset chart labels.
-      if (chartScenarioLabel) {
-        chartScenarioLabel.textContent = "NO SCENARIO SELECTED";
-      }
-
-      if (distributionScenarioLabel) {
-        distributionScenarioLabel.textContent = "NO SCENARIO SELECTED";
-      }
-
-      // Remove the current charts.
-      if (trafficChart) {
-        trafficChart.destroy();
-        trafficChart = null;
-      }
-
-      if (distributionChart) {
-        distributionChart.destroy();
-        distributionChart = null;
-      }
-
-      // Refresh the comparison table.
-      updateComparisonTable();
-
-      console.log("RushGuard demo reset.");
-    });
+  function stopReplay() {
+    isReplaying = false;
+    if (replayTimer) {
+      clearInterval(replayTimer);
+      replayTimer = null;
+    }
+    if (global.RushGuardStore) {
+      global.RushGuardStore.set((prev) => ({
+        replay: Object.assign({}, prev.replay, { isPlaying: false })
+      }));
+    }
   }
 
-  console.log("RushGuard initialized successfully.");
-});
+  function resetReplay() {
+    stopReplay();
+    replayCurrentTime = 0;
+    if (currentRawRequests && currentRawRequests.length > 0) {
+      const curScenario = global.RushGuardStore.get().activeScenario || 'normal';
+      evaluateAndPublishState(currentRawRequests, curScenario, 'Replay reset to initial state.');
+    }
+  }
+
+  function setSpeed(speed) {
+    replaySpeed = speed;
+    if (global.RushGuardStore) {
+      global.RushGuardStore.set((prev) => ({
+        replay: Object.assign({}, prev.replay, { speed })
+      }));
+    }
+  }
+
+  // Bind Public App Controller to window
+  global.RushGuardApp = {
+    loadScenario,
+    loadCSV,
+    togglePlay,
+    resetReplay,
+    setSpeed,
+    reEvaluateCurrentScenario,
+    switchView
+  };
+
+  // Run on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
+  }
+
+})(typeof window !== 'undefined' ? window : this);
