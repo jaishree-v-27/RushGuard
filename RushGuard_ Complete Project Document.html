@@ -1,0 +1,750 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}</style><style>:root{color-scheme:light dark;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}}:root[data-theme="dark"]{color-scheme:dark;--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}:root[data-theme="light"]{color-scheme:light}@media print{:root,:root[data-theme="dark"]{color-scheme:light;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}}body{background:var(--md-bg);color:var(--md-text);max-width:720px;margin:0 auto;padding:32px;display:flex;flex-direction:column;gap:10px;font:14px/1.55 -apple-system,BlinkMacSystemFont,'SF Pro','Segoe UI',sans-serif;overflow-wrap:break-word}body>:first-child{margin-top:0}h1,h2,h3,h4,h5,h6{margin:6px 0 0;line-height:1.25;font-weight:600;text-wrap:balance}h1{font-size:1.35em}h2{font-size:1.15em;color:var(--md-muted)}h3,h4,h5,h6{font-size:1em}p,ul,ol,blockquote,table,pre,hr{margin:0}strong{font-weight:600}a{color:var(--md-link);text-decoration:none}a:hover{text-decoration:underline}ul,ol{display:flex;flex-direction:column;gap:6px;padding-left:22px}ul{list-style:disc}ol{list-style:decimal}:is(li,td,th)>*+:is(p,ul,ol,blockquote){margin-top:6px}blockquote{display:flex;flex-direction:column;gap:10px;border-left:2px solid var(--md-rule);padding-left:10px;color:var(--md-muted)}:not(pre)>code{background:var(--md-fill);padding:1px 3px;border-radius:4px;font:.92em 'SF Mono',ui-monospace,Menlo,Consolas,monospace}a>code{background:none;color:inherit}pre{background:var(--md-fill);padding:10px 12px;border-radius:6px;overflow-x:auto;font:12px/1.5 'SF Mono',ui-monospace,Menlo,Consolas,monospace;margin-block:4px}pre code{background:none;padding:0;font:inherit}table{width:100%;border-collapse:separate;border-spacing:2px;font:inherit}th,td{padding:6px 8px;border-radius:3px;text-align:left;vertical-align:top}th{background:var(--md-fill-strong);font-weight:600}td{background:var(--md-fill)}:is(th,td) :not(pre)>code{background:transparent}hr{border:0;border-top:1px solid var(--md-rule-strong);margin-block:10px}img{max-width:100%;height:auto;border-radius:4px}</style>
+</head><body>
+<h1>RushGuard</h1>
+<h2>Fair Access to Academic Web Forms: Complete Project Document</h2>
+<p><em>A session-aware rate-limiting and fairness monitor that gently throttles script floods while keeping forms open for legitimate, concurrent students. It is explainable, reversible and AI-assisted.</em></p>
+<hr>
+<h2>1. Project at a Glance</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>RushGuard</td>
+</tr>
+<tr>
+<td>Domain</td>
+<td>Availability and fairness on shared academic web services</td>
+</tr>
+<tr>
+<td>Core idea</td>
+<td>Count POST submissions per fictional session across <strong>two time windows</strong>; respond with Allow, Warn or Slow</td>
+</tr>
+<tr>
+<td>Headline features</td>
+<td>Guard OFF vs ON benchmark, Traffic Barcode, Two-Window Rule</td>
+</tr>
+<tr>
+<td>AI role</td>
+<td>Explains, advises and (with limits) acts as a first-line operator; never makes the core decision</td>
+</tr>
+<tr>
+<td>Environment</td>
+<td>Fictional sessions and a mock service only</td>
+</tr>
+</tbody>
+</table>
+<p><strong>One-sentence success test:</strong> 30 students submitting once each all stay <strong>Allowed</strong>, while one scripted session is isolated within seconds and recovers through cooldown or amnesty, and no student loses their submission time.</p>
+<hr>
+<h2>2. The Problem</h2>
+<h3>2.1 Context</h3>
+<p>Students and staff use academic web services to fill in forms, open materials and submit work. These services run on shared capacity: every request consumes a slice of what everyone else needs.</p>
+<h3>2.2 What goes wrong</h3>
+<p>A script (a retry loop, an auto-refresher or deliberate hammering) can repeat submissions many times per second from one session. This causes slower responses for others, unfair use of capacity, and operators who cannot see who is responsible or why.</p>
+<h3>2.3 Why it is hard</h3>
+<p>Different situations create heavy traffic, and a simple counter cannot separate them:</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Genuine rush</strong> (deadline night)</td>
+<td>Many different sessions, about one submit each</td>
+</tr>
+<tr>
+<td><strong>Script flood</strong></td>
+<td>One session, many submits in seconds</td>
+</tr>
+<tr>
+<td><strong>Slow-drip script</strong></td>
+<td>One session, steady submits spaced just under a short limit</td>
+</tr>
+<tr>
+<td><strong>Nervous student</strong></td>
+<td>One person, a double-click or a couple of retries</td>
+</tr>
+</tbody>
+</table>
+<p>Blocking everyone who looks busy punishes the innocent majority, and a wrongly blocked student may <strong>miss a deadline</strong>.</p>
+<h3>2.4 Why common fixes fall short</h3>
+<ul>
+<li>Hard blocks and error pages are punishing and hard to undo.</li>
+<li>Global rate limits slow everyone during a rush.</li>
+<li>Invasive detection (IP tracking, fingerprinting, mouse or keystroke monitoring) is inappropriate for a student service.</li>
+<li>Opaque scoring gives operators no reason to trust a decision.</li>
+<li>A single short window is easy to evade by spacing requests out.</li>
+</ul>
+<h3>2.5 Problem statement</h3>
+<blockquote>
+<p>Build a monitor that separates many people submitting once from one session submitting repeatedly, including slow-drip evasion. It must respond proportionately and reversibly, explain every decision in plain language, protect every student's submission time, and prove its impact, all without real accounts, IP addresses or invasive fingerprinting.</p>
+</blockquote>
+<hr>
+<h2>3. Objectives</h2>
+<ol>
+<li>Detect rapid and slow-drip repeated submissions per session using two windows.</li>
+<li>Never treat a busy period of distinct sessions as a flood.</li>
+<li>Respond in graded steps: Allow, Warn, temporary Slow. Never lock anyone out.</li>
+<li>Make every decision reversible by an operator or the AI operator, with a record.</li>
+<li>Explain every decision with the threshold that fired and recent requests.</li>
+<li>Guarantee submission timestamps even when slowed.</li>
+<li><strong>Prove impact</strong> with a Guard OFF vs ON benchmark.</li>
+<li>Make behaviour visible at a glance with the Traffic Barcode.</li>
+<li>Use AI to explain, advise and assist, within strict guardrails.</li>
+<li>Demonstrate normal, busy and scripted behaviour in two minutes.</li>
+</ol>
+<hr>
+<h2>4. Scope and Boundaries</h2>
+<p><strong>In scope:</strong> a local mock form, replay of generated traffic, a rule-based detector, an operator dashboard, an AI assistant panel, three scenarios.</p>
+<p><strong>Out of scope, by design</strong></p>
+<ul>
+<li>Real accounts, IP addresses, production portals or real student data.</li>
+<li>Browser fingerprinting, mouse or keystroke tracking, or any invasive telemetry.</li>
+<li>Machine-learning classifiers for the core decision, or large datasets.</li>
+<li>Defence against attackers who rotate sessions or run distributed attacks. RushGuard is a fairness aid, not a security product.</li>
+</ul>
+<hr>
+<h2>5. Solution Overview: Three Layers</h2>
+<ol>
+<li><strong>Rule engine (deterministic):</strong> counts submissions, applies thresholds, produces decisions. Instant, predictable, explainable.</li>
+<li><strong>Visual and impact layer:</strong> Traffic Barcode, Guard OFF vs ON benchmark, live graph and fairness scorecard.</li>
+<li><strong>AI assistant layer:</strong> turns engine output into explanations, suggestions and, optionally, bounded actions.</li>
+</ol>
+<p>The AI sits <strong>beside</strong> the rule engine, never inside it. If the AI fails, the system still works.</p>
+<hr>
+<h2>6. Detection Rule: The Two-Window Design</h2>
+<p>For each session and each route, count <strong>POST</strong> submissions in two sliding windows at once. GET requests, other routes and other sessions never add to the count.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Short window (burst)</th>
+<th>Long window (slow-drip)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Length</td>
+<td>5 seconds</td>
+<td>60 seconds</td>
+</tr>
+<tr>
+<td>Warn at</td>
+<td>4 submits</td>
+<td>11 submits</td>
+</tr>
+<tr>
+<td>Slow at</td>
+<td>8 submits</td>
+<td>20 submits</td>
+</tr>
+</tbody>
+</table>
+<p>Other settings: double-click grace 1 second, amnesty 5 minutes, delay steps 2 s then 4 s. <strong>All values are editable in the dashboard.</strong></p>
+<p><strong>Decision ladder:</strong> a session takes the more severe result of the two windows.</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Trigger</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Allow</strong></td>
+<td>Both windows under Warn</td>
+<td>Passes normally</td>
+</tr>
+<tr>
+<td><strong>Warn</strong></td>
+<td>Either window reaches Warn</td>
+<td>Passes; student sees a calm notice; operator sees a yellow flag</td>
+</tr>
+<tr>
+<td><strong>Slow</strong></td>
+<td>Either window reaches Slow</td>
+<td>Accepted and receipted, but processed with a visible delay (2 s, then 4 s) in a separate slow lane</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why two windows:</strong> the short window catches rapid-fire bursts. The long window catches a script that spaces requests just under the short limit. Each flag names which window fired.</p>
+<p><strong>Decay:</strong> after a calm period the delay steps down (4 to 2 to 0) and the session returns to Allow.</p>
+<hr>
+<h2>7. Fairness Safeguards</h2>
+<ul>
+<li><strong>Distinct-session awareness:</strong> many sessions with low counts show &quot;Busy period, all fair&quot;; one session with a high count shows &quot;Flood.&quot;</li>
+<li><strong>Double-click grace:</strong> two identical submits within one second count once.</li>
+<li><strong>Timestamp Guarantee Receipt:</strong> every submit is stamped on arrival. Being slowed never changes the recorded submission time, so deadlines are protected.</li>
+<li><strong>Student-friendly message:</strong> &quot;Your draft is saved. You can submit again in 8 s.&quot;</li>
+<li><strong>Queue position:</strong> slowed submissions appear in receipt order (&quot;position 3 of 5&quot;).</li>
+<li><strong>Evidence, not triggers:</strong> timing gaps and an optional <code>form_opened</code> yes/no flag are shown to explain a flag but never trigger one. The count rule is the only trigger, which avoids unexplained false positives.</li>
+</ul>
+<hr>
+<h2>8. Standout Features</h2>
+<h3>8.1 Guard OFF vs Guard ON (Impact Benchmark)</h3>
+<p>A toggle replays the <strong>same</strong> flood twice through a simulated server with fixed capacity.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>What happens</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Guard OFF</strong></td>
+<td>The flood shares one queue with students and clogs it</td>
+<td>Student wait times spike, targeting 10+ seconds</td>
+</tr>
+<tr>
+<td><strong>Guard ON</strong></td>
+<td>The flooding session is isolated into a slow lane</td>
+<td>Student wait times stay flat, targeting under 0.2 seconds</td>
+</tr>
+</tbody>
+</table>
+<p>The simulation is clearly labelled and the numbers <strong>come out of the model</strong>, not hard-coded. A summary line shows average student wait for each mode.</p>
+<h3>8.2 Traffic Barcode (Visual Timeline)</h3>
+<p>Each session gets a row, and every submit places a dot along a time axis, colour-coded by decision.</p>
+<ul>
+<li><strong>Real students:</strong> scattered green dots across many rows.</li>
+<li><strong>Script attack:</strong> a dense, solid line on one row, turning yellow then orange.</li>
+<li><strong>Slow-drip bot:</strong> evenly spaced dots, which is visibly different from human scatter.</li>
+</ul>
+<p>Judges grasp the difference without reading logs.</p>
+<h3>8.3 Two-Window Rule</h3>
+<p>Described in section 6. It demonstrates that the design anticipates evasive behaviour. In the demo, a slow-drip bot slips past the 5-second window but is caught by the 60-second window.</p>
+<hr>
+<h2>9. Explainability and Operator Tools</h2>
+<ul>
+<li><strong>FLAG_REASON:</strong> plain English, for example &quot;15 submits in 3.2 s (short window, Slow at 8), form never opened.&quot;</li>
+<li><strong>Why card:</strong> count, window, threshold, a dot timeline of recent requests, and gap evidence (&quot;gaps all about 0.2 s&quot;).</li>
+<li><strong>Clear:</strong> resets a session's counts and decision instantly.</li>
+<li><strong>Grant Amnesty:</strong> clears the session and starts a time-boxed 5-minute amnesty during which requests are still counted and shown but cannot trigger Slow. It is never a permanent whitelist, because a permanent bypass is exactly what a script wants.</li>
+<li><strong>Mistake Recovery Log:</strong> records time, session, rule that fired, count, action, who acted (human or AI) and a note. Three or more amnesties on one rule trigger a hint such as &quot;Warn at 4 may be too tight.&quot;</li>
+<li><strong>What-if tuner:</strong> change windows or thresholds and re-run the same replay to see how many sessions would be flagged.</li>
+<li><strong>Fairness scorecard:</strong> &quot;Sessions affected: 1 of 34. Legitimate students slowed: 0.&quot; An answer key from the generator makes this verifiable.</li>
+<li><strong>Live graph:</strong> Active Sessions, Throttled Sessions and System Health Index. Health is the percentage of active sessions currently in Allow.</li>
+</ul>
+<hr>
+<h2>10. AI Layer</h2>
+<h3>10.1 Principle</h3>
+<p>AI <strong>assists</strong>; the rule engine <strong>decides</strong>. It is fast, deterministic and explainable at its core, and AI adds language and judgment on top.</p>
+<h3>10.2 AI roles</h3>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Incident Explainer</strong></td>
+<td>Turns a flag into operator text: &quot;Slow-drip: 11 submits in 60 s, about one every 5 s. The 5 s window never fired; the 60 s window did.&quot;</td>
+</tr>
+<tr>
+<td><strong>AI Operator</strong></td>
+<td>Handles routine borderline cases: grants amnesty or recommends it, and logs its reasoning</td>
+</tr>
+<tr>
+<td><strong>Benchmark Narrator</strong></td>
+<td>Summarises the OFF vs ON run: &quot;Student wait fell from 12.4 s to 0.18 s; 1 of 34 sessions throttled.&quot;</td>
+</tr>
+<tr>
+<td><strong>Threshold Advisor</strong></td>
+<td>Reads the Mistake Recovery Log and suggests tuning either window</td>
+</tr>
+<tr>
+<td><strong>Ask RushGuard</strong> (optional)</td>
+<td>Operator asks &quot;why was S-031 slowed?&quot; and gets a plain answer</td>
+</tr>
+</tbody>
+</table>
+<h3>10.3 Operator modes</h3>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Manual</strong></td>
+<td>A human decides everything</td>
+</tr>
+<tr>
+<td><strong>Suggest</strong></td>
+<td>AI recommends (&quot;Grant amnesty to S-031?&quot;) and a human approves with one tap</td>
+</tr>
+<tr>
+<td><strong>Auto</strong></td>
+<td>AI acts alone within strict limits</td>
+</tr>
+</tbody>
+</table>
+<h3>10.4 Guardrails</h3>
+<ul>
+<li>The AI may only use existing actions: Clear or the 5-minute Grant Amnesty.</li>
+<li>It cannot block anyone, change thresholds or alter counts.</li>
+<li>Amnesty still counts requests, so tricking the AI gains a script nothing real.</li>
+<li>It forgives only borderline cases (count just over Warn, human-like gaps). Clear floods stay throttled.</li>
+<li>If unsure, slow or offline, it escalates to a human or falls back to the plain rule.</li>
+<li>Every AI action is logged with reasoning and can be undone by a human.</li>
+<li>Metric shown: <strong>&quot;AI actions overturned by humans.&quot;</strong></li>
+</ul>
+<h3>10.5 Providers (all free)</h3>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Provider</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primary</td>
+<td>Gemini API key from Google AI Studio</td>
+<td>Free tier with no billing; strongest quality</td>
+</tr>
+<tr>
+<td>Backup</td>
+<td>Groq (not the same as Grok)</td>
+<td>Free, no card, very fast</td>
+</tr>
+<tr>
+<td>Offline fallback</td>
+<td>Ollama (local model)</td>
+<td>Fully free and unlimited, lower quality</td>
+</tr>
+</tbody>
+</table>
+<p>Free-tier limits change often, so verify them in each console before demo day. The provider is a single config setting so switching takes seconds. Only fictional session summaries are sent. API keys stay on the backend, never in the browser. AI text for the three demo scenarios is cached, with template text as a fallback.</p>
+<hr>
+<h2>11. How It Works End to End</h2>
+<ol>
+<li>A request arrives from the replay or mock form with timestamp, session ID, route, method and optional <code>form_opened</code>.</li>
+<li>Non-POST requests are logged in history but not counted.</li>
+<li>For POSTs, the double-click grace is applied, then the submit is added to the session's recent list.</li>
+<li>Entries older than each window are dropped and both windows are counted.</li>
+<li>A receipt is stamped with the arrival time.</li>
+<li>The more severe window result gives Allow, Warn or Slow, respecting any active amnesty.</li>
+<li>Slow requests go to the slow lane with the current delay and a queue position; calm behaviour steps the delay down.</li>
+<li>The engine builds the reason string. The AI layer may expand it.</li>
+<li>The dashboard updates the table, barcode, graph, scorecard and benchmark.</li>
+<li>A human or the AI operator may clear or grant amnesty, which is logged.</li>
+</ol>
+<hr>
+<h2>12. Data and Scenarios</h2>
+<p><strong>Replay fields:</strong> timestamp (seconds), session_id (fictional, such as S-017), route, method, form_opened (optional). A generator also writes an <strong>answer key</strong> naming the script sessions.</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Traffic</th>
+<th>Expected outcome</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Normal</strong></td>
+<td>About 6 sessions, mostly page views, occasional submits</td>
+<td>All Allow</td>
+</tr>
+<tr>
+<td><strong>Rush</strong></td>
+<td>30 sessions each submitting once in a burst, plus a few double-clicks</td>
+<td>All Allow, &quot;Busy&quot; badge, 0 flagged</td>
+</tr>
+<tr>
+<td><strong>Script burst</strong></td>
+<td>One session with 15 submits in about 3 seconds among normal students</td>
+<td>Reaches Warn then Slow; others Allow</td>
+</tr>
+<tr>
+<td><strong>Slow-drip</strong></td>
+<td>One session submitting about every 5 seconds for a minute</td>
+<td>Short window stays quiet; long window flags it</td>
+</tr>
+<tr>
+<td><strong>Nervous student</strong></td>
+<td>3 submits within 5 seconds</td>
+<td>Allow</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>13. Dashboard Layout</h2>
+<table>
+<thead>
+<tr>
+<th>Panel</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Control bar</td>
+<td>Scenario buttons, replay speed (10x), editable windows and thresholds, operator mode</td>
+</tr>
+<tr>
+<td>1. Guard benchmark</td>
+<td>OFF/ON toggle and average student wait</td>
+</tr>
+<tr>
+<td>2. Two-window metrics</td>
+<td>Short and long window settings, live counts</td>
+</tr>
+<tr>
+<td>3. Traffic Barcode</td>
+<td>One row per session, dots over time, decision badge</td>
+</tr>
+<tr>
+<td>4. Status</td>
+<td>Busy or Flood badge, live graph, fairness scorecard</td>
+</tr>
+<tr>
+<td>5. Why card</td>
+<td>Reason, thresholds, timeline and gap evidence for the selected session</td>
+</tr>
+<tr>
+<td>6. Operator panel</td>
+<td>Clear, Grant Amnesty, note box, Mistake Recovery Log</td>
+</tr>
+<tr>
+<td>7. AI panel</td>
+<td>Incident explanation, suggestion with Approve button, narrator summary</td>
+</tr>
+<tr>
+<td>Student view</td>
+<td>Warning message, receipt and queue position</td>
+</tr>
+</tbody>
+</table>
+<p>On small screens these panels stack in the order above.</p>
+<hr>
+<h2>14. Technology Stack</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Structure</td>
+<td>HTML5</td>
+<td>Form, dashboard, tables</td>
+</tr>
+<tr>
+<td>Styling</td>
+<td>CSS3 (Flexbox/Grid)</td>
+<td>Colour-coded decisions, responsive layout</td>
+</tr>
+<tr>
+<td>Logic</td>
+<td>Vanilla JavaScript (ES6)</td>
+<td>Replay player, two-window counters, decision engine, simulated server queue</td>
+</tr>
+<tr>
+<td>Charts</td>
+<td>Chart.js</td>
+<td>Live Active, Throttled and Health graph</td>
+</tr>
+<tr>
+<td>Barcode</td>
+<td>HTML canvas or SVG</td>
+<td>Per-session dot timeline</td>
+</tr>
+<tr>
+<td>Data loading</td>
+<td>Browser File API</td>
+<td>Reads CSV replay files locally</td>
+</tr>
+<tr>
+<td>State</td>
+<td>In-memory objects; optional localStorage</td>
+<td>Sessions, history, recovery log</td>
+</tr>
+<tr>
+<td>Replay generator</td>
+<td>Python 3 (standard library)</td>
+<td>Creates scenarios and the answer key</td>
+</tr>
+<tr>
+<td>Backend (AI only)</td>
+<td>Python with Flask</td>
+<td>Holds the API key, calls the AI provider, serves cached text</td>
+</tr>
+<tr>
+<td>AI</td>
+<td>Gemini (primary), Groq (backup), Ollama (offline)</td>
+<td>Explain, advise, assist</td>
+</tr>
+<tr>
+<td>Tools</td>
+<td>VS Code, Git/GitHub, browser dev tools</td>
+<td>Development and teamwork</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>Manual acceptance checklist, answer key, optional unittest</td>
+<td>Verification</td>
+</tr>
+<tr>
+<td>Demo</td>
+<td>OBS Studio or screen recording</td>
+<td>Backup recording</td>
+</tr>
+</tbody>
+</table>
+<p><strong>No database, cloud service or sign-in is needed.</strong> Google sign-in would bring in real identities, which breaks the fictional-only boundary. A mock Operator/Student role switch is enough.</p>
+<hr>
+<h2>15. Success Criteria and Testing</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test</th>
+<th>Pass condition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>30 sessions, 1 submit each</td>
+<td>0 flagged, badge = Busy</td>
+</tr>
+<tr>
+<td>2</td>
+<td>15 submits in 3 s from one session</td>
+<td>Warn then Slow; reason names the short window</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Slow-drip session</td>
+<td>Long window flags it; short window does not</td>
+</tr>
+<tr>
+<td>4</td>
+<td>GET spam</td>
+<td>Never counted</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Two identical submits within 1 s</td>
+<td>Counted once</td>
+</tr>
+<tr>
+<td>6</td>
+<td>3 submits in 5 s</td>
+<td>Allow</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Slowed submit</td>
+<td>Receipt time equals arrival time</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Calm period after Slow</td>
+<td>Delay decays; returns to Allow</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Grant Amnesty</td>
+<td>Student proceeds; log entry written</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Guard OFF then ON</td>
+<td>Student wait drops sharply and flatly</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Barcode</td>
+<td>Flood is one solid line, rush is scattered</td>
+</tr>
+<tr>
+<td>12</td>
+<td>AI offline</td>
+<td>Template text appears; core decisions unaffected</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Change thresholds in tuner</td>
+<td>Flagged counts update correctly</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>16. Two-Minute Live Demo</h2>
+<table>
+<thead>
+<tr>
+<th>Time</th>
+<th>Action</th>
+<th>Message</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0:00 to 0:25</td>
+<td>Normal scenario</td>
+<td>Everything Allow</td>
+</tr>
+<tr>
+<td>0:25 to 0:55</td>
+<td>Rush scenario</td>
+<td>30 students, &quot;Busy, all fair,&quot; 0 flagged, barcode scattered</td>
+</tr>
+<tr>
+<td>0:55 to 1:25</td>
+<td>Script flood with Guard OFF, then ON</td>
+<td>Student wait spikes, then stays flat; bot is one solid barcode line</td>
+</tr>
+<tr>
+<td>1:25 to 1:45</td>
+<td>Slow-drip bot</td>
+<td>Short window misses it, long window catches it</td>
+</tr>
+<tr>
+<td>1:45 to 2:00</td>
+<td>AI Operator</td>
+<td>AI forgives the nervous student, bot stays throttled; scorecard: 1 of 34 affected, 0 legitimate students blocked</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>17. Deliverables and Build Plan</h2>
+<p><strong>Deliverables:</strong> local mock form and detector with visible decisions, configurable windows and request history; reversible warning and slowdown; Guard benchmark; Traffic Barcode; operator dashboard with log; AI panel with fallback; generated replay files and answer key; a two-minute demo; this documentation.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Build</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Replay generator and CSV loader</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Single-window rule, then the second window</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Why card, receipts and student message</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Clear, Grant Amnesty and Mistake Recovery Log</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Traffic Barcode</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Simulated server and Guard OFF/ON benchmark</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Live graph, scorecard and what-if tuner</td>
+</tr>
+<tr>
+<td>8</td>
+<td>AI backend, panels, modes and fallback; rehearse the demo</td>
+</tr>
+</tbody>
+</table>
+<p>Phases 1 to 4 meet the core brief. Phases 5 to 8 are the differentiators; if time is short, cut from the end.</p>
+<hr>
+<h2>18. Limitations and Ethics</h2>
+<ul>
+<li><strong>Session rotation:</strong> a script that changes session IDs would evade a per-session rule.</li>
+<li><strong>Simulated benchmark:</strong> it models a server rather than measuring a real one, and is labelled as such.</li>
+<li><strong>Shared devices:</strong> a lab computer could look busy, so thresholds are adjustable and amnesty exists.</li>
+<li><strong>Privacy by design:</strong> only session ID, route, method, timing and a coarse flag are used.</li>
+<li><strong>Human in the loop:</strong> every decision is explainable and overridable, and every override is recorded.</li>
+<li><strong>Proportionate response:</strong> the worst outcome is a short, decaying delay with a guaranteed receipt.</li>
+<li><strong>AI safety:</strong> AI cannot block, cannot change settings, and sees only fictional data.</li>
+</ul>
+<hr>
+<h2>19. Why RushGuard Stands Out</h2>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Basic solution</th>
+<th>RushGuard</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Throttling</td>
+<td>Hard block or error page</td>
+<td>Progressive delay with decay and receipts</td>
+</tr>
+<tr>
+<td>Detection</td>
+<td>One count per window</td>
+<td>Two windows catching bursts and slow-drip</td>
+</tr>
+<tr>
+<td>Proof</td>
+<td>None</td>
+<td>Guard OFF vs ON benchmark</td>
+</tr>
+<tr>
+<td>Visibility</td>
+<td>Raw logs</td>
+<td>Traffic Barcode</td>
+</tr>
+<tr>
+<td>Operator</td>
+<td>Manual record deletion</td>
+<td>Amnesty, recovery log and a guard-railed AI operator</td>
+</tr>
+<tr>
+<td>Insight</td>
+<td>None</td>
+<td>Live graph, scorecard, what-if tuner, AI advisor</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>20. Likely Judge Questions</h2>
+<ul>
+<li><strong>Can a bot just change its session?</strong> Yes. That is out of scope; RushGuard targets fairness on a shared service, not distributed attacks.</li>
+<li><strong>Why not let AI decide?</strong> Predictability and explainability matter when a student could be affected, so AI advises and acts only within limits.</li>
+<li><strong>Are the benchmark numbers real?</strong> They come from a labelled simulation with fixed capacity, so the effect is demonstrated, not claimed.</li>
+<li><strong>How do you avoid punishing students?</strong> Distinct-session awareness, double-click grace, gentle delays, receipts and reversible amnesty.</li>
+</ul>
+<hr>
+<h2>21. Stretch Ideas</h2>
+<ul>
+<li>Receipt verification codes with a &quot;Verify my receipt&quot; page.</li>
+<li>Time Machine slider to scrub through the replay.</li>
+<li>Deadline Mode that relaxes thresholds in the final minutes.</li>
+<li>Red Team Lab to tune a fake bot and watch RushGuard respond.</li>
+<li>Fairness Index showing how evenly capacity is shared.</li>
+</ul>
+
+</body></html>
